@@ -50,25 +50,60 @@ impl HeaderSection {
     }
 
     pub fn to_response(&self) -> Vec<u8> {
-        let mut response = Vec::new();
-        response.push((self.packet_identifier >> 8) as u8);
-        response.push(self.packet_identifier as u8);
-        response.push(self.query_response_indicator);
-        response.push(self.operation_code);
-        response.push(self.authoritative_answer);
-        response.push(self.truncation);
-        response.push(self.recursion_desired);
-        response.push(self.recursion_available);
-        response.push(self.reserved);
-        response.push(self.response_code);
-        response.push((self.question_count >> 8) as u8);
-        response.push(self.question_count as u8);
-        response.push((self.answer_record_count >> 8) as u8);
-        response.push(self.answer_record_count as u8);
-        response.push((self.authority_record_count >> 8) as u8);
-        response.push(self.authority_record_count as u8);
-        response.push((self.additional_record_count >> 8) as u8);
-        response.push(self.additional_record_count as u8);
+        let mut response = Vec::with_capacity(12);
+
+        // Bytes 0-1: Packet ID (16 bits)
+        // Split 16-bit ID into two bytes using big-endian format
+        // >> 8 gets the high byte, & 0xFF (implicit) gets the low byte
+        response.push((self.packet_identifier >> 8) as u8); // high byte
+        response.push(self.packet_identifier as u8); // low byte
+
+        // Byte 2: Flags byte 1 (8 bits total)
+        // +--+--+--+--+--+--+--+--+
+        // |QR|  OPCODE   |AA|TC|RD|
+        // +--+--+--+--+--+--+--+--+
+        // QR (1 bit):    Query (0) or Response (1)          << 7
+        // OPCODE (4 bits): Type of query                    << 3
+        // AA (1 bit):    Authoritative Answer               << 2
+        // TC (1 bit):    Truncation                         << 1
+        // RD (1 bit):    Recursion Desired                  << 0
+        let byte2 = (self.query_response_indicator << 7) // Move QR to bit 7
+            | (self.operation_code << 3) // Move OPCODE to bits 3-6
+            | (self.authoritative_answer << 2) // Move AA to bit 2
+            | (self.truncation << 1) // Move TC to bit 1
+            | self.recursion_desired; // Move RD to bit 0
+        response.push(byte2);
+
+        // Byte 3: Flags byte 2 (8 bits total)
+        // +--+--+--+--+--+--+--+--+
+        // |RA|   Z    |   RCODE   |
+        // +--+--+--+--+--+--+--+--+
+        // RA (1 bit):    Recursion Available               << 7
+        // Z (3 bits):    Reserved for future use           << 4
+        // RCODE (4 bits): Response code                    & 0x0F
+        let byte3 = (self.recursion_available << 7) // Move RA to bit 7
+            | (self.reserved << 4) // Move Z to bits 4-6
+            | (self.response_code & 0x0F); // Ensure RCODE is only 4 bits
+        response.push(byte3);
+
+        // Bytes 4-11: Counter fields (16 bits each)
+        // Each counter is split into two bytes (big-endian)
+        // QDCOUNT: Number of questions
+        response.push((self.question_count >> 8) as u8); // high byte
+        response.push(self.question_count as u8); // low byte
+
+        // ANCOUNT: Number of answer records
+        response.push((self.answer_record_count >> 8) as u8); // high byte
+        response.push(self.answer_record_count as u8); // low byte
+
+        // NSCOUNT: Number of authority records
+        response.push((self.authority_record_count >> 8) as u8); // high byte
+        response.push(self.authority_record_count as u8); // low byte
+
+        // ARCOUNT: Number of additional records
+        response.push((self.additional_record_count >> 8) as u8); // high byte
+        response.push(self.additional_record_count as u8); // low byte
+
         response
     }
 
